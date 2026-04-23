@@ -1,0 +1,254 @@
+services:
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    container_name: vivaeventos-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo ruok | nc localhost 2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vivaeventos-net
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: vivaeventos-kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:29092"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    networks:
+      - vivaeventos-net
+
+  db-events:
+    image: postgres:16-alpine
+    container_name: vivaeventos-db-events
+    environment:
+      POSTGRES_DB: eventdb
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata-events:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d eventdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vivaeventos-net
+
+  db-orders:
+    image: postgres:16-alpine
+    container_name: vivaeventos-db-orders
+    environment:
+      POSTGRES_DB: orderdb
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata-orders:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d orderdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vivaeventos-net
+
+  db-payments:
+    image: postgres:16-alpine
+    container_name: vivaeventos-db-payments
+    environment:
+      POSTGRES_DB: paymentdb
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata-payments:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d paymentdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vivaeventos-net
+
+  db-tickets:
+    image: postgres:16-alpine
+    container_name: vivaeventos-db-tickets
+    environment:
+      POSTGRES_DB: ticketdb
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata-tickets:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ticketdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vivaeventos-net
+
+  db-notifications:
+    image: postgres:16-alpine
+    container_name: vivaeventos-db-notifications
+    environment:
+      POSTGRES_DB: notificationdb
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata-notifications:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d notificationdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vivaeventos-net
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    container_name: vivaeventos-api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - vivaeventos-net
+
+  event-service:
+    build:
+      context: .
+      dockerfile: event-service/Dockerfile
+    container_name: vivaeventos-event-service
+    environment:
+      DB_HOST: db-events
+      DB_NAME: eventdb
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    depends_on:
+      db-events:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - vivaeventos-net
+
+  order-service:
+    build:
+      context: .
+      dockerfile: order-service/Dockerfile
+    container_name: vivaeventos-order-service
+    environment:
+      DB_HOST: db-orders
+      DB_NAME: orderdb
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    depends_on:
+      db-orders:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - vivaeventos-net
+
+  payment-service:
+    build:
+      context: .
+      dockerfile: payment-service/Dockerfile
+    container_name: vivaeventos-payment-service
+    environment:
+      DB_HOST: db-payments
+      DB_NAME: paymentdb
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      PAYMENT_GATEWAY_URL: ${PAYMENT_GATEWAY_URL}
+      PAYMENT_PUBLIC_KEY: ${PAYMENT_PUBLIC_KEY}
+      PAYMENT_PRIVATE_KEY: ${PAYMENT_PRIVATE_KEY}
+      PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET}
+    depends_on:
+      db-payments:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - vivaeventos-net
+
+  ticket-service:
+    build:
+      context: .
+      dockerfile: ticket-service/Dockerfile
+    container_name: vivaeventos-ticket-service
+    environment:
+      DB_HOST: db-tickets
+      DB_NAME: ticketdb
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    depends_on:
+      db-tickets:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - vivaeventos-net
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: notification-service/Dockerfile
+    container_name: vivaeventos-notification-service
+    environment:
+      DB_HOST: db-notifications
+      DB_NAME: notificationdb
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      MAIL_HOST: ${MAIL_HOST}
+      MAIL_PORT: ${MAIL_PORT}
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+    depends_on:
+      db-notifications:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - vivaeventos-net
+
+networks:
+  vivaeventos-net:
+    driver: bridge
+
+volumes:
+  pgdata-events:
+  pgdata-orders:
+  pgdata-payments:
+  pgdata-tickets:
+  pgdata-notifications:

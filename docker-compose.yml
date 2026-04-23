@@ -1,5 +1,34 @@
+version: '3.8'
+
+# =============================================================
+# REDES
+# Todos los contenedores se comunican internamente por esta
+# red virtual.
+# =============================================================
+networks:
+  vivaeventos-net:
+    driver: bridge
+
+# =============================================================
+# VOLÚMENES
+# Docker guarda aquí los datos de cada base de datos.
+# Aunque se apague Docker, los datos persisten en estos
+# volúmenes.
+# ⚠️  SECCIÓN A CARGO DE DAVID ASCENCIO
+# =============================================================
+volumes:
+  pgdata-events:
+  pgdata-orders:
+  pgdata-payments:
+  pgdata-tickets:
+  pgdata-notifications:
+
 services:
 
+  # ===========================================================
+  # ZOOKEEPER
+  # Coordinador interno que Kafka necesita para funcionar.
+  # ===========================================================
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.0
     container_name: vivaeventos-zookeeper
@@ -14,6 +43,13 @@ services:
     networks:
       - vivaeventos-net
 
+  # ===========================================================
+  # KAFKA
+  # Sistema de mensajería entre microservicios.
+  # En lugar de que un servicio llame directamente a otro
+  # (comunicación frágil), publica un "evento" en Kafka y
+  # el servicio destino lo consume cuando esté disponible.
+  # ===========================================================
   kafka:
     image: confluentinc/cp-kafka:7.6.0
     container_name: vivaeventos-kafka
@@ -38,6 +74,14 @@ services:
       retries: 5
     networks:
       - vivaeventos-net
+
+  # ===========================================================
+  # BASES DE DATOS
+  # Cada microservicio tiene su propia instancia de PostgreSQL.
+  # Ningún servicio puede tocar la BD de otro directamente,
+  # toda comunicación entre servicios va por Kafka o Feign.
+  # ⚠️  CONFIGURACIÓN A CARGO DE DAVID ASCENCIO
+  # ===========================================================
 
   db-events:
     image: postgres:16-alpine
@@ -124,6 +168,41 @@ services:
     networks:
       - vivaeventos-net
 
+  # ===========================================================
+  # DISCOVERY SERVER (Eureka)
+  # Es el "directorio telefónico" del sistema. Cada
+  # microservicio se registra aquí al arrancar con su nombre
+  # y dirección. Cuando api-gateway necesita hablar con
+  # event-service, le pregunta a Eureka dónde está en lugar
+  # de tener una dirección fija. Esto permite escalar
+  # servicios sin cambiar configuraciones.
+  # Se levanta antes que todos los microservicios.
+  # Panel web: http://localhost:8761
+  # ===========================================================
+  discovery-server:
+    build:
+      context: .
+      dockerfile: discovery-server/Dockerfile
+    container_name: vivaeventos-discovery-server
+    ports:
+      - "8761:8761"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8761/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vivaeventos-net
+
+  # ===========================================================
+  # API GATEWAY
+  # Única puerta de entrada al sistema desde el exterior.
+  # El cliente (frontend, Postman, app móvil) NUNCA llama
+  # directamente a los microservicios;
+  # El gateway consulta Eureka para saber a qué dirección
+  # redirigir cada petición según la ruta.
+  # Puerto expuesto: 8080
+  # ===========================================================
   api-gateway:
     build:
       context: .
@@ -132,61 +211,105 @@ services:
     ports:
       - "8080:8080"
     environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_URL}
       JWT_SECRET: ${JWT_SECRET}
     depends_on:
+      discovery-server:
+        condition: service_healthy
       kafka:
         condition: service_healthy
     networks:
       - vivaeventos-net
 
+  # ===========================================================
+  # EVENT SERVICE
+  # Gestiona la creación, consulta y filtrado de eventos.
+  # Es el servicio más consultado del sistema.
+  # Puerto expuesto: 8081 (solo para desarrollo)
+  # Swagger UI: http://localhost:8081/swagger-ui.html
+  # ===========================================================
   event-service:
     build:
       context: .
       dockerfile: event-service/Dockerfile
     container_name: vivaeventos-event-service
+    ports:
+      - "8081:8081"              # expuesto solo para desarrollo
     environment:
       DB_HOST: db-events
       DB_NAME: eventdb
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_URL}
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     depends_on:
       db-events:
+        condition: service_healthy
+      discovery-server:
         condition: service_healthy
       kafka:
         condition: service_healthy
     networks:
       - vivaeventos-net
 
+  # ===========================================================
+  # ORDER SERVICE
+  # Gestiona la compra de boletas y el ciclo de vida de
+  # las órdenes (PENDING → PAID → CANCELLED).
+  # Se comunica con event-service via Feign para verificar
+  # disponibilidad, y publica eventos en Kafka cuando
+  # una orden cambia de estado.
+  # Puerto expuesto: 8082 (solo para desarrollo)
+  # Swagger UI: http://localhost:8082/swagger-ui.html
+  # ===========================================================
   order-service:
     build:
       context: .
       dockerfile: order-service/Dockerfile
     container_name: vivaeventos-order-service
+    ports:
+      - "8082:8082"
     environment:
       DB_HOST: db-orders
       DB_NAME: orderdb
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_URL}
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     depends_on:
       db-orders:
+        condition: service_healthy
+      discovery-server:
         condition: service_healthy
       kafka:
         condition: service_healthy
     networks:
       - vivaeventos-net
 
+  # ===========================================================
+  # PAYMENT SERVICE
+  # Procesa los pagos conectándose a la pasarela externa
+  # (MercadoPago en modo sandbox para pruebas).
+  # Recibe webhooks de MercadoPago confirmando si el pago
+  # fue aprobado, rechazado o quedó pendiente.
+  # Publica el resultado en Kafka para que order-service
+  # actualice el estado de la orden.
+  # Puerto expuesto: 8083 (solo para desarrollo)
+  # Swagger UI: http://localhost:8083/swagger-ui.html
+  # ===========================================================
   payment-service:
     build:
       context: .
       dockerfile: payment-service/Dockerfile
     container_name: vivaeventos-payment-service
+    ports:
+      - "8083:8083"
     environment:
       DB_HOST: db-payments
       DB_NAME: paymentdb
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_URL}
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       PAYMENT_GATEWAY_URL: ${PAYMENT_GATEWAY_URL}
       PAYMENT_PUBLIC_KEY: ${PAYMENT_PUBLIC_KEY}
@@ -195,40 +318,70 @@ services:
     depends_on:
       db-payments:
         condition: service_healthy
+      discovery-server:
+        condition: service_healthy
       kafka:
         condition: service_healthy
     networks:
       - vivaeventos-net
 
+  # ===========================================================
+  # TICKET SERVICE
+  # Genera la boleta digital con código QR único una vez
+  # que el pago es confirmado. El QR contiene un token
+  # firmado que se valida en la puerta del evento.
+  # Un mismo QR no puede usarse dos veces.
+  # Puerto expuesto: 8084 (solo para desarrollo)
+  # Swagger UI: http://localhost:8084/swagger-ui.html
+  # ===========================================================
   ticket-service:
     build:
       context: .
       dockerfile: ticket-service/Dockerfile
     container_name: vivaeventos-ticket-service
+    ports:
+      - "8084:8084"
     environment:
       DB_HOST: db-tickets
       DB_NAME: ticketdb
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_URL}
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     depends_on:
       db-tickets:
+        condition: service_healthy
+      discovery-server:
         condition: service_healthy
       kafka:
         condition: service_healthy
     networks:
       - vivaeventos-net
 
+  # ===========================================================
+  # NOTIFICATION SERVICE
+  # Envía correos y mensajes al usuario (confirmación de
+  # compra, recordatorio de evento, cambios o cancelaciones).
+  # Consume eventos de Kafka de forma asíncrona: si este
+  # servicio se cae, los mensajes quedan encolados en Kafka
+  # y se entregan cuando vuelva a estar disponible.
+  # Esto garantiza que una falla aquí NO afecte la compra.
+  # Puerto expuesto: 8085 (solo para desarrollo)
+  # Swagger UI: http://localhost:8085/swagger-ui.html
+  # ===========================================================
   notification-service:
     build:
       context: .
       dockerfile: notification-service/Dockerfile
     container_name: vivaeventos-notification-service
+    ports:
+      - "8085:8085"
     environment:
       DB_HOST: db-notifications
       DB_NAME: notificationdb
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_URL}
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       MAIL_HOST: ${MAIL_HOST}
       MAIL_PORT: ${MAIL_PORT}
@@ -237,18 +390,9 @@ services:
     depends_on:
       db-notifications:
         condition: service_healthy
+      discovery-server:
+        condition: service_healthy
       kafka:
         condition: service_healthy
     networks:
       - vivaeventos-net
-
-networks:
-  vivaeventos-net:
-    driver: bridge
-
-volumes:
-  pgdata-events:
-  pgdata-orders:
-  pgdata-payments:
-  pgdata-tickets:
-  pgdata-notifications:

@@ -86,6 +86,8 @@ services:
   db-events:
     image: postgres:16-alpine
     container_name: vivaeventos-db-events
+    ports:
+      - "5432:5432"
     environment:
       POSTGRES_DB: eventdb
       POSTGRES_USER: ${DB_USER}

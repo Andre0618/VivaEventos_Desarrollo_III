@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import java.math.BigDecimal;
 
 @Entity
 @Table(name = "promo_codes")
@@ -20,7 +21,8 @@ public class PromoCode {
     @Column(unique = true)
     private String code;
 
-    private Double discountPct;
+    @Column(name = "discount_pct")
+    private BigDecimal discountPct;
 
     private Integer maxUses;
 

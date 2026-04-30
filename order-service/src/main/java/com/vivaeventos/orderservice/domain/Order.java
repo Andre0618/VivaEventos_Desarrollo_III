@@ -2,6 +2,8 @@ package com.vivaeventos.orderservice.domain;
 
 import jakarta.persistence.*;
 import lombok.*;
+
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -25,11 +27,11 @@ public class Order {
 
     private Integer quantity;
 
-    private Double unitPrice;
+    private BigDecimal unitPrice;
 
-    private Double discountPct;
+    private BigDecimal discountPct;
 
-    private Double totalAmount;
+    private BigDecimal totalAmount;
 
     @ManyToOne
     @JoinColumn(name = "promo_code_id")

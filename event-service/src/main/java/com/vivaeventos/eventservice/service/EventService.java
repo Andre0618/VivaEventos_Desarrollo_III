@@ -10,6 +10,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * @Service → Marca esta clase como componente de lógica de negocio.
@@ -83,6 +86,26 @@ public class EventService {
         // 4. Convertir la entidad guardada en DTO de respuesta y devolverlo
         return EventResponse.from(savedEvent);
     }
+    /**
+     * Filtra eventos por categoría y/o rango de fechas.
+     * Si no hay resultados, devuelve lista vacía (el controller maneja el mensaje).
+     */
+    public List<EventResponse> filterEvents(String category, LocalDateTime dateFrom, LocalDateTime dateTo) {
+        log.info("Filtrando eventos - categoría: {}, desde: {}, hasta: {}", category, dateFrom, dateTo);
+
+        List<Event> events = eventRepository.findByFilters(
+                Event.EventStatus.ACTIVE,
+                category,
+                dateFrom,
+                dateTo
+        );
+
+        log.info("Se encontraron {} eventos con los filtros aplicados", events.size());
+
+        return events.stream()
+                .map(EventResponse::from)
+                .collect(java.util.stream.Collectors.toList());
+    }
 
     /**
      * Publica un mensaje en el topic de Kafka "event.created".
@@ -105,5 +128,6 @@ public class EventService {
             // En producción usarías un outbox pattern o retry, pero para el MVP esto es suficiente
             log.error("Error al publicar en Kafka el evento {}: {}", event.getId(), e.getMessage());
         }
+
     }
 }

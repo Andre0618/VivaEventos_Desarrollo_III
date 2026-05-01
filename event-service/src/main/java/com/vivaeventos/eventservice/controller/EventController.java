@@ -2,6 +2,7 @@ package com.vivaeventos.eventservice.controller;
 
 import com.vivaeventos.eventservice.dto.CreateEventRequest;
 import com.vivaeventos.eventservice.dto.EventResponse;
+import com.vivaeventos.eventservice.dto.EventDTO;
 import com.vivaeventos.eventservice.service.EventService;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -30,6 +31,30 @@ public class EventController {
     public ResponseEntity<EventResponse> createEvent(@Valid @RequestBody CreateEventRequest request) {
         EventResponse response = eventService.createEvent(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    /**
+     * GET /events/catalog — Obtiene todos los eventos disponibles (US-02)
+     *
+     * Criterios de aceptación:
+     * - Mostrar nombre, fecha y lugar
+     * - Permitir ver todos los eventos disponibles
+     *
+     * Respuesta:
+     * - Si hay eventos → devuelve lista con HTTP 200
+     * - Si no hay eventos → devuelve mensaje con HTTP 200
+     */
+    @GetMapping("/catalog")
+    public ResponseEntity<?> getAllEvents() {
+        List<EventDTO> events = eventService.getAllEvents();
+
+        if (events.isEmpty()) {
+            return ResponseEntity.ok(
+                    Map.of("message", "No hay eventos disponibles en el catálogo")
+            );
+        }
+
+        return ResponseEntity.ok(events);
     }
 
     /**

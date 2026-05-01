@@ -2,6 +2,7 @@ package com.vivaeventos.eventservice.service;
 
 import com.vivaeventos.eventservice.dto.CreateEventRequest;
 import com.vivaeventos.eventservice.dto.EventResponse;
+import com.vivaeventos.eventservice.dto.EventDTO;
 import com.vivaeventos.eventservice.model.Event;
 import com.vivaeventos.eventservice.repository.EventRepository;
 import org.slf4j.Logger;
@@ -104,6 +105,23 @@ public class EventService {
 
         return events.stream()
                 .map(EventResponse::from)
+                .collect(java.util.stream.Collectors.toList());
+    }
+
+    /**
+     * Obtiene todos los eventos activos disponibles (US-02).
+     * Solo devuelve los campos: nombre, fecha y lugar.
+     *
+     * @return Lista de EventDTO con eventos disponibles ordenados por fecha
+     */
+    public List<EventDTO> getAllEvents() {
+        log.info("Obteniendo catálogo completo de eventos disponibles");
+
+        List<Event> events = eventRepository.findAll();
+
+        return events.stream()
+                .filter(event -> event.getStatus() == Event.EventStatus.ACTIVE)
+                .map(EventDTO::from)
                 .collect(java.util.stream.Collectors.toList());
     }
 

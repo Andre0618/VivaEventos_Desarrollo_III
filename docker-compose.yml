@@ -14,7 +14,6 @@ networks:
 # Docker guarda aquí los datos de cada base de datos.
 # Aunque se apague Docker, los datos persisten en estos
 # volúmenes.
-# ⚠️  SECCIÓN A CARGO DE DAVID ASCENCIO
 # =============================================================
 volumes:
   pgdata-events:
@@ -80,7 +79,6 @@ services:
   # Cada microservicio tiene su propia instancia de PostgreSQL.
   # Ningún servicio puede tocar la BD de otro directamente,
   # toda comunicación entre servicios va por Kafka o Feign.
-  # ⚠️  CONFIGURACIÓN A CARGO DE DAVID ASCENCIO
   # ===========================================================
 
   db-events:
@@ -291,7 +289,7 @@ services:
   # ===========================================================
   # PAYMENT SERVICE
   # Procesa los pagos conectándose a la pasarela externa
-  # (MercadoPago en modo sandbox para pruebas).
+  # (Wompi en modo sandbox para pruebas).
   # Recibe webhooks de MercadoPago confirmando si el pago
   # fue aprobado, rechazado o quedó pendiente.
   # Publica el resultado en Kafka para que order-service

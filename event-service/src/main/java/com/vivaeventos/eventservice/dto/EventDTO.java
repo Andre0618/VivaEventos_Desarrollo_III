@@ -1,7 +1,15 @@
 package com.vivaeventos.eventservice.dto;
 
 import com.vivaeventos.eventservice.model.Event;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
 import java.time.LocalDateTime;
+
+@Getter
+@NoArgsConstructor
+@AllArgsConstructor
 
 /**
  * DTO simplificado para el catálogo de eventos
@@ -17,21 +25,9 @@ public class EventDTO {
     private LocalDateTime eventDate;
     private String venue;
 
-    // Constructor vacío
-    public EventDTO() {}
-
-    /**
-     * Constructor con parámetros
-     */
-    public EventDTO(String name, LocalDateTime eventDate, String venue) {
-        this.name = name;
-        this.eventDate = eventDate;
-        this.venue = venue;
-    }
-
     /**
      * Método estático de fábrica: convierte una entidad Event en un EventDTO.
-     *
+     * <p>
      * Se usa así: EventDTO.from(event)
      */
     public static EventDTO from(Event event) {
@@ -40,32 +36,6 @@ public class EventDTO {
                 event.getEventDate(),
                 event.getVenue()
         );
-    }
-
-    // ── Getters ──
-    public String getName() {
-        return name;
-    }
-
-    public LocalDateTime getEventDate() {
-        return eventDate;
-    }
-
-    public String getVenue() {
-        return venue;
-    }
-
-    // ── Setters (aunque típicamente no se usan en DTOs de respuesta) ──
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public void setEventDate(LocalDateTime eventDate) {
-        this.eventDate = eventDate;
-    }
-
-    public void setVenue(String venue) {
-        this.venue = venue;
     }
 }
 

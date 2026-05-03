@@ -1,5 +1,9 @@
 package com.vivaeventos.eventservice.dto;
 
+import lombok.NoArgsConstructor;
+import lombok.Getter;
+import lombok.Setter;
+
 import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -25,6 +29,9 @@ import java.util.UUID;
  * Las anotaciones @NotBlank, @NotNull, etc. validan el JSON automáticamente
  * antes de que llegue al service. Si algo falla, Spring devuelve 400 Bad Request.
  */
+@Getter
+@Setter
+@NoArgsConstructor
 public class CreateEventRequest {
 
     // @NotBlank = no puede ser null, vacío ni solo espacios
@@ -62,32 +69,4 @@ public class CreateEventRequest {
     // Por ahora lo recibimos en el request para simplificar el MVP.
     @NotNull(message = "El ID del organizador es obligatorio")
     private UUID organizerId;
-
-    // ── Constructor vacío necesario para que Jackson deserialice el JSON ──
-    public CreateEventRequest() {}
-
-    // ── Getters y Setters ─────────────────────────────────────────────────
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
-
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
-
-    public String getCategory() { return category; }
-    public void setCategory(String category) { this.category = category; }
-
-    public String getVenue() { return venue; }
-    public void setVenue(String venue) { this.venue = venue; }
-
-    public LocalDateTime getEventDate() { return eventDate; }
-    public void setEventDate(LocalDateTime eventDate) { this.eventDate = eventDate; }
-
-    public Integer getCapacity() { return capacity; }
-    public void setCapacity(Integer capacity) { this.capacity = capacity; }
-
-    public BigDecimal getPrice() { return price; }
-    public void setPrice(BigDecimal price) { this.price = price; }
-
-    public UUID getOrganizerId() { return organizerId; }
-    public void setOrganizerId(UUID organizerId) { this.organizerId = organizerId; }
 }

@@ -1,16 +1,16 @@
 package com.vivaeventos.eventservice.controller;
 
 import com.vivaeventos.eventservice.dto.CreateEventRequest;
+import com.vivaeventos.eventservice.dto.EventFilterRequest;
 import com.vivaeventos.eventservice.dto.EventResponse;
 import com.vivaeventos.eventservice.dto.EventDTO;
 import com.vivaeventos.eventservice.service.EventService;
 import jakarta.validation.Valid;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.ModelAttribute;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -67,14 +67,13 @@ public class EventController {
      * Criterio 2: no hay resultados → devuelve mensaje adecuado con HTTP 200
      */
     @GetMapping
-    public ResponseEntity<?> filterEvents(
-            @RequestParam(required = false) String category,
-            @RequestParam(required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime dateFrom,
-            @RequestParam(required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime dateTo) {
+    public ResponseEntity<?> filterEvents(@ModelAttribute EventFilterRequest filter) {
 
-        List<EventResponse> events = eventService.filterEvents(category, dateFrom, dateTo);
+        List<EventResponse> events = eventService.filterEvents(
+                filter.getCategory(),
+                filter.getDateFrom(),
+                filter.getDateTo()
+        );
 
         if (events.isEmpty()) {
             return ResponseEntity.ok(
@@ -85,3 +84,9 @@ public class EventController {
         return ResponseEntity.ok(events);
     }
 }
+
+/**Anotación por si hay error de tipado o consistencia:
+ * ser cuidadosos con ResponseEntity<?>, puesto que podría generar
+ * inconsistencias al no conocer con exactitud lo que se recibe. Se deja sin correcciones
+ * por funcionamiento correcto
+ */

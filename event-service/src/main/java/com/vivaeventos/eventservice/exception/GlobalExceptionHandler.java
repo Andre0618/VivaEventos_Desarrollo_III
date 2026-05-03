@@ -15,8 +15,8 @@ import java.util.Map;
  * @RestControllerAdvice → Intercepta excepciones de TODOS los controllers
  *                         y devuelve respuestas JSON en lugar de páginas de error feas.
  *
- * Sin este archivo, si la validación falla recibirías un JSON enorme y confuso
- * de Spring. Con este archivo recibes algo limpio como:
+ * Sin este archivo, si la validación falla se devuelve un JSON enorme y confuso
+ * de Spring. Se expresa con más claridad:
  *
  * {
  *   "timestamp": "2025-04-25T10:30:00",
@@ -65,7 +65,7 @@ public class GlobalExceptionHandler {
         body.put("timestamp", LocalDateTime.now().toString());
         body.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());
         body.put("error", "Internal server error");
-        body.put("message", ex.getMessage());
+        body.put("message", "¡Ocurrió un error inesperado!"); //Modificado por error genérico para evitar exposición interna
 
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
     }

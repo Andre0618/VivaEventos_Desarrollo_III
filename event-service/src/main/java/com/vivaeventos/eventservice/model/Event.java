@@ -1,6 +1,9 @@
 package com.vivaeventos.eventservice.model;
 
 import jakarta.persistence.*;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.Getter;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -11,12 +14,15 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "events")
+@Getter
+@Setter
+@NoArgsConstructor
 public class Event {
 
     /**
-     * @Id         → Esta es la llave primaria
+     * @Id → Esta es la llave primaria
      * @GeneratedValue → La BD genera el UUID automáticamente (gen_random_uuid() en el SQL)
-     * @Column     → Mapea el campo al nombre exacto de la columna en la tabla
+     * @Column → Mapea el campo al nombre exacto de la columna en la tabla
      */
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -40,6 +46,9 @@ public class Event {
 
     @Column(name = "capacity", nullable = false)
     private Integer capacity;
+
+    @Column(name = "available_tickets", nullable = false)
+    private Integer availableTickets;
 
     // BigDecimal es el tipo correcto para precios (evita errores de redondeo)
     @Column(name = "price", nullable = false, precision = 12, scale = 2)
@@ -69,43 +78,4 @@ public class Event {
         CANCELLED,
         SOLD_OUT
     }
-
-    // ── Constructor vacío obligatorio para JPA ─────────────────────────
-    public Event() {}
-
-    // ── Getters y Setters ──────────────────────────────────────────────
-    // (En producción usarías Lombok @Getter @Setter para no escribir esto,
-    //  pero aquí lo dejamos explícito para que veas qué hace cada uno)
-
-    public UUID getId() { return id; }
-
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
-
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
-
-    public String getCategory() { return category; }
-    public void setCategory(String category) { this.category = category; }
-
-    public String getVenue() { return venue; }
-    public void setVenue(String venue) { this.venue = venue; }
-
-    public LocalDateTime getEventDate() { return eventDate; }
-    public void setEventDate(LocalDateTime eventDate) { this.eventDate = eventDate; }
-
-    public Integer getCapacity() { return capacity; }
-    public void setCapacity(Integer capacity) { this.capacity = capacity; }
-
-    public BigDecimal getPrice() { return price; }
-    public void setPrice(BigDecimal price) { this.price = price; }
-
-    public EventStatus getStatus() { return status; }
-    public void setStatus(EventStatus status) { this.status = status; }
-
-    public UUID getOrganizerId() { return organizerId; }
-    public void setOrganizerId(UUID organizerId) { this.organizerId = organizerId; }
-
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public LocalDateTime getUpdatedAt() { return updatedAt; }
 }

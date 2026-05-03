@@ -8,12 +8,15 @@ import com.vivaeventos.eventservice.repository.EventRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import jakarta.persistence.criteria.Predicate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * @Service → Marca esta clase como componente de lógica de negocio.
@@ -24,9 +27,6 @@ import java.util.stream.Collectors;
  *  3. Guardarlo en la BD con el repository
  *  4. Publicar el evento en Kafka (para que otros microservicios se enteren)
  *  5. Devolver el EventResponse al controller
- *
- * Lo que NO hace el service: saber nada de HTTP (sin HttpRequest, sin ResponseEntity).
- * Eso es responsabilidad exclusiva del Controller.
  */
 @Service
 public class EventService {
@@ -71,6 +71,7 @@ public class EventService {
         event.setVenue(request.getVenue());
         event.setEventDate(request.getEventDate());
         event.setCapacity(request.getCapacity());
+        event.setAvailableTickets(request.getCapacity());
         event.setPrice(request.getPrice());
         event.setOrganizerId(request.getOrganizerId());
         event.setStatus(Event.EventStatus.ACTIVE);  // Todo evento nuevo nace como ACTIVE
@@ -87,25 +88,42 @@ public class EventService {
         // 4. Convertir la entidad guardada en DTO de respuesta y devolverlo
         return EventResponse.from(savedEvent);
     }
+
     /**
      * Filtra eventos por categoría y/o rango de fechas.
      * Si no hay resultados, devuelve lista vacía (el controller maneja el mensaje).
      */
+    @Transactional(readOnly = true)
     public List<EventResponse> filterEvents(String category, LocalDateTime dateFrom, LocalDateTime dateTo) {
         log.info("Filtrando eventos - categoría: {}, desde: {}, hasta: {}", category, dateFrom, dateTo);
 
-        List<Event> events = eventRepository.findByFilters(
-                Event.EventStatus.ACTIVE,
-                category,
-                dateFrom,
-                dateTo
+        Specification<Event> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(cb.equal(root.get("status"), Event.EventStatus.ACTIVE));
+            predicates.add(cb.greaterThan(root.get("availableTickets"), 0));
+
+            if (category != null && !category.isBlank()) {
+                predicates.add(cb.equal(root.get("category"), category));
+            }
+            if (dateFrom != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("eventDate"), dateFrom));
+            }
+            if (dateTo != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("eventDate"), dateTo));
+            }
+
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };  // <-- termina el Specification, el método continúa abajo
+
+        List<Event> events = eventRepository.findAll(spec,
+                Sort.by(Sort.Direction.ASC, "eventDate")
         );
 
         log.info("Se encontraron {} eventos con los filtros aplicados", events.size());
 
         return events.stream()
                 .map(EventResponse::from)
-                .collect(java.util.stream.Collectors.toList());
+                .toList();
     }
 
     /**
@@ -114,15 +132,18 @@ public class EventService {
      *
      * @return Lista de EventDTO con eventos disponibles ordenados por fecha
      */
+    @Transactional(readOnly = true)
     public List<EventDTO> getAllEvents() {
         log.info("Obteniendo catálogo completo de eventos disponibles");
 
-        List<Event> events = eventRepository.findAll();
+        List<Event> events = eventRepository
+                .findByStatusAndAvailableTicketsGreaterThanOrderByEventDateAsc(
+                        Event.EventStatus.ACTIVE, 0
+                );
 
         return events.stream()
-                .filter(event -> event.getStatus() == Event.EventStatus.ACTIVE)
                 .map(EventDTO::from)
-                .collect(java.util.stream.Collectors.toList());
+                .toList();
     }
 
     /**
@@ -143,9 +164,7 @@ public class EventService {
 
             log.info("Mensaje publicado en Kafka topic '{}' para evento {}", eventCreatedTopic, event.getId());
         } catch (Exception e) {
-            // En producción usarías un outbox pattern o retry, pero para el MVP esto es suficiente
             log.error("Error al publicar en Kafka el evento {}: {}", event.getId(), e.getMessage());
         }
-
     }
 }

@@ -7,12 +7,12 @@ CREATE TABLE events (
     name VARCHAR(255) NOT NULL,
     description TEXT,
     category VARCHAR(100),
-    location VARCHAR(255) NOT NULL,  -- mejor que venue
+    venue VARCHAR(255) NOT NULL,  -- (se modifica definitivamente a venue)
     event_date TIMESTAMP NOT NULL,
     capacity INTEGER NOT NULL CHECK (capacity > 0),
     available_tickets INTEGER NOT NULL CHECK (available_tickets >= 0),
     price NUMERIC(12, 2) NOT NULL CHECK (price >= 0),
-    status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE',
+    status VARCHAR(50) NOT NULL, -- (se elimina el default ACTIVE para evitar redundancia)
     organizer_id UUID NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT now(),
     updated_at TIMESTAMP NOT NULL DEFAULT now()

@@ -9,6 +9,7 @@ COPY order-service/pom.xml ./order-service/pom.xml
 COPY payment-service/pom.xml ./payment-service/pom.xml
 COPY ticket-service/pom.xml ./ticket-service/pom.xml
 COPY notification-service/pom.xml ./notification-service/pom.xml
+COPY discovery-server/pom.xml ./discovery-server/pom.xml
 
 # Descargar dependencias solo del módulo necesario
 RUN mvn -pl payment-service dependency:go-offline -q

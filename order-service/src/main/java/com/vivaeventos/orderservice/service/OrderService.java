@@ -7,12 +7,13 @@ import com.vivaeventos.orderservice.exception.OrderNotFoundException;
 import com.vivaeventos.orderservice.kafka.OrderEventPublisher;
 import com.vivaeventos.orderservice.repository.OrderRepository;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Transactional;import com.vivaeventos.orderservice.dto.EventSalesResponse;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import java.util.List;
 
 @Service
 public class OrderService {
@@ -114,6 +115,55 @@ public class OrderService {
         order.setStatus("PAYMENT_PROCESSING");
         order.setUpdatedAt(LocalDateTime.now());
         repository.save(order);
+    }
+    /**
+     * Consulta el reporte de ventas de un evento.
+     *
+     * Criterio 1: existen compras → muestra total vendido e ingresos.
+     * Criterio 2: muestra número de boletas vendidas.
+     *
+     * Solo se cuentan órdenes con status CONFIRMED — las PENDING o CANCELLED
+     * no representan ventas reales.
+     *
+     * @param eventId UUID del evento a consultar
+     * @return EventSalesResponse con métricas agregadas del evento
+     */
+    @Transactional(readOnly = true)
+    public EventSalesResponse getEventSales(UUID eventId) {
+
+        // 1. Obtener todas las órdenes confirmadas del evento
+        List<Order> confirmedOrders = repository.findByEventIdAndStatus(
+                eventId, "CONFIRMED"
+        );
+
+        // 2. Si no hay ventas → devolver reporte vacío con mensaje adecuado
+        if (confirmedOrders.isEmpty()) {
+            return new EventSalesResponse(
+                    eventId,
+                    0,
+                    BigDecimal.ZERO,
+                    0,
+                    "No hay ventas registradas para este evento"
+            );
+        }
+
+        // 3. Calcular métricas agregadas
+        // Total de boletas = suma de quantity de cada orden
+        // (una orden puede tener quantity > 1)
+        Integer ticketsSold = repository.countTicketsSoldByEventId(eventId, "CONFIRMED");
+
+        // Total de ingresos = suma de totalAmount de cada orden confirmada
+        BigDecimal totalRevenue = repository.sumRevenueByEventId(eventId, "CONFIRMED");
+
+        // Total de órdenes = número de registros confirmados
+        Integer totalOrders = confirmedOrders.size();
+
+        String message = String.format(
+                "Se han vendido %d boletas en %d órdenes con ingresos totales de $%s",
+                ticketsSold, totalOrders, totalRevenue.toPlainString()
+        );
+
+        return new EventSalesResponse(eventId, ticketsSold, totalRevenue, totalOrders, message);
     }
 
     // Resuelve precio por tipo. En MVP real esto vendría del event-service via Kafka o HTTP

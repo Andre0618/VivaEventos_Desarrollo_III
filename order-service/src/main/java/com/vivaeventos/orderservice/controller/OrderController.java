@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import com.vivaeventos.orderservice.dto.EventSalesResponse;
 
 import java.util.UUID;
 
@@ -31,6 +32,26 @@ public class OrderController {
     @GetMapping("/{id}")
     public ResponseEntity<OrderResponse> getById(@PathVariable UUID id) {
         OrderResponse response = service.getOrderById(id);
+        return ResponseEntity.ok(response);
+    }
+    /**
+     * GET /api/orders/events/{eventId}/sales
+     *
+     * Consulta el reporte de ventas de un evento (US-10).
+     * Solo accesible para organizadores (el rol se valida en el api-gateway).
+     *
+     * @PathVariable eventId → UUID del evento a consultar
+     *
+     * Respuestas posibles:
+     * - HTTP 200 con datos   → hay ventas registradas (criterio 1)
+     * - HTTP 200 sin ventas  → no hay ventas, mensaje informativo (criterio 2)
+     *
+     * Ejemplo de llamada:
+     * GET http://localhost:8082/api/orders/events/550e8400-e29b-41d4-a716-446655440000/sales
+     */
+    @GetMapping("/events/{eventId}/sales")
+    public ResponseEntity<EventSalesResponse> getEventSales(@PathVariable UUID eventId) {
+        EventSalesResponse response = service.getEventSales(eventId);
         return ResponseEntity.ok(response);
     }
 }

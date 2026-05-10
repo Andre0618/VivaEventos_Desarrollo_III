@@ -10,6 +10,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.bind.annotation.ModelAttribute;
+import com.vivaeventos.eventservice.dto.UpdatePriceRequest;
+import com.vivaeventos.eventservice.exception.EventNotFoundException;
+import jakarta.validation.Valid;
+import java.util.UUID;
+import org.springframework.http.HttpStatus;
+
 
 import java.util.List;
 import java.util.Map;
@@ -82,6 +88,52 @@ public class EventController {
         }
 
         return ResponseEntity.ok(events);
+    }
+
+    /**
+     * PATCH /events/{id}/price
+     *
+     * Modifica el precio de las boletas de un evento (US-11).
+     *
+     * ¿Por qué PATCH y no PUT?
+     * - PUT reemplaza el recurso completo (requeriría enviar todos los campos del evento)
+     * - PATCH modifica solo un campo específico → más eficiente y semánticamente correcto
+     *
+     * @PathVariable → Lee el {id} de la URL y lo convierte a UUID automáticamente.
+     *                 Ejemplo: PATCH /events/550e8400-e29b-41d4-a716-446655440000/price
+     *
+     * @Valid → Activa las validaciones de UpdatePriceRequest (@NotNull, @DecimalMin).
+     *          Si el precio es negativo o falta, Spring devuelve HTTP 400 automáticamente.
+     *
+     * Respuestas posibles:
+     *  - HTTP 200 OK          → precio actualizado exitosamente
+     *  - HTTP 400 Bad Request → precio inválido (negativo o faltante)
+     *  - HTTP 404 Not Found   → evento no existe
+     *  - HTTP 409 Conflict    → evento ya inició o no está activo
+     *
+     * Ejemplo de llamada:
+     * PATCH http://localhost:8081/events/550e8400-e29b-41d4-a716-446655440000/price
+     * Content-Type: application/json
+     * { "newPrice": 95000.00 }
+     */
+    @PatchMapping("/{id}/price")
+    public ResponseEntity<?> updatePrice(
+            @PathVariable UUID id,
+            @Valid @RequestBody UpdatePriceRequest request) {
+        try {
+            EventResponse response = eventService.updatePrice(id, request);
+            return ResponseEntity.ok(response);
+
+        } catch (EventNotFoundException e) {
+            // HTTP 404 → el evento no existe
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", e.getMessage()));
+
+        } catch (IllegalStateException e) {
+            // HTTP 409 Conflict → el evento ya inició o no está activo
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("error", e.getMessage()));
+        }
     }
 }
 

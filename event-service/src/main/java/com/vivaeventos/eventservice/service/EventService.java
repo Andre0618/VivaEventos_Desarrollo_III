@@ -17,6 +17,10 @@ import jakarta.persistence.criteria.Predicate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import com.vivaeventos.eventservice.dto.UpdatePriceRequest;
+import com.vivaeventos.eventservice.exception.EventNotFoundException;
+import java.math.BigDecimal;
+import java.util.UUID;
 
 /**
  * @Service → Marca esta clase como componente de lógica de negocio.
@@ -153,6 +157,82 @@ public class EventService {
      * Si Kafka no está disponible, logueamos el error pero NO lanzamos excepción
      * para no romper el flujo de creación del evento (el evento ya se guardó en BD).
      */
+
+    /**
+     * Modifica el precio de las boletas de un evento.
+     *
+     * Reglas de negocio implementadas:
+     *  1. El evento debe existir → si no, lanza EventNotFoundException (HTTP 404)
+     *  2. El evento no debe haber iniciado → si ya inició, lanza IllegalStateException (HTTP 409)
+     *  3. El evento debe estar ACTIVE → cancelados o agotados no se modifican (HTTP 409)
+     *  4. Si todo es válido → actualiza el precio y guarda en BD
+     *
+     * Criterio de aceptación 1
+     *  "Dado que el evento no ha iniciado cuando el organizador cambia el precio
+     *   entonces el sistema debe actualizar el valor."
+     *
+     * Criterio de aceptación 2
+     *  "Dado que existen nuevas compras cuando se realiza el cambio
+     *   entonces deben usar el nuevo precio."
+     *  → Esto se cumple automáticamente porque el order-service consulta el precio
+     *    vigente en el momento de crear la orden, no el precio histórico.
+     *
+     * @Transactional garantiza que si algo falla (ej: error de BD al guardar),
+     * se hace rollback y el precio no queda a medias actualizado.
+     *
+     * @param eventId  UUID del evento cuyo precio se va a modificar
+     * @param request  DTO con el nuevo precio validado
+     * @return         EventResponse con todos los datos del evento ya actualizados
+     * @throws EventNotFoundException  si el evento no existe
+     * @throws IllegalStateException   si el evento ya inició o no está activo
+     */
+    @Transactional
+    public EventResponse updatePrice(UUID eventId, UpdatePriceRequest request) {
+        log.info("Actualizando precio del evento {} a {}", eventId, request.getNewPrice());
+
+        // 1. Buscar el evento en la BD.
+        //    findById devuelve Optional<Event>.
+        //    orElseThrow lanza EventNotFoundException si el Optional está vacío.
+        //    El GlobalExceptionHandler convierte esa excepción en HTTP 404.
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new EventNotFoundException(
+                        "Evento no encontrado con ID: " + eventId));
+
+        // 2. Verificar que el evento no ha iniciado.
+        //    isBefore(now) → la fecha del evento es anterior al momento actual
+        //    → el evento ya pasó o está en curso → no se puede modificar el precio
+        if (event.getEventDate().isBefore(LocalDateTime.now())) {
+            throw new IllegalStateException(
+                    "No se puede modificar el precio de un evento que ya ha iniciado");
+        }
+
+        // 3. Verificar que el evento está en estado ACTIVE.
+        //    Un evento CANCELLED o SOLD_OUT no debería tener cambios de precio
+        //    porque ya no acepta nuevas compras.
+        if (event.getStatus() != Event.EventStatus.ACTIVE) {
+            throw new IllegalStateException(
+                    "No se puede modificar el precio de un evento cancelado o agotado");
+        }
+
+        // 4. Guardar el precio anterior solo para el log (auditoría básica).
+        //    En producción esto iría a una tabla de historial de precios.
+        BigDecimal precioAnterior = event.getPrice();
+
+        // 5. Actualizar el precio en la entidad.
+        //    Como la entidad está dentro de una transacción activa (@Transactional),
+        //    JPA detecta el cambio automáticamente (dirty checking) y genera el UPDATE.
+        event.setPrice(request.getNewPrice());
+
+        // 6. Guardar explícitamente y obtener la entidad actualizada con updatedAt nuevo.
+        Event updatedEvent = eventRepository.save(event);
+        log.info("Precio del evento {} actualizado de {} a {}",
+                eventId, precioAnterior, request.getNewPrice());
+
+        // 7. Convertir la entidad a DTO de respuesta y devolver.
+        //    El order-service consultará este precio actualizado en nuevas compras (criterio 2).
+        return EventResponse.from(updatedEvent);
+    }
+
     private void publishEventCreated(Event event) {
         try {
             // El mensaje que enviamos a Kafka es el EventResponse (serializado a JSON)
